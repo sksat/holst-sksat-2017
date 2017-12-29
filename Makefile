@@ -2,10 +2,10 @@
 	inkscape -C -z --file=$< --export-eps=$@
 
 default:
-	latexmk holst.tex
+	latexmk holst-sksat.tex
 
 run:
-	latexmk -pvc holst.tex
+	latexmk -pvc holst-sksat.tex
 
 clean:
 	rm -f *.aux *.dvi *.fdb_latexmk *.fls *.log *.synctex.gz

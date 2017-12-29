@@ -1,0 +1,48 @@
+\documentclass[b5paper]{ujreport}
+\usepackage{bxpapersize}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage[subrefformat=parens]{subcaption}
+\usepackage{wrapfig}
+\usepackage{listings,jlisting}
+\renewcommand{\lstlistingname}{リスト}
+\lstset{language=C,%
+		breaklines=true,%
+        basicstyle=\footnotesize,%
+        commentstyle=\textit,%
+        classoffset=1,%
+        keywordstyle=\bfseries,%
+	frame=tRBl,framesep=5pt,%
+	showstringspaces=false,%
+        numbers=left,stepnumber=1,numberstyle=\footnotesize%
+	}%
+\usepackage{url}
+\usepackage{ulem}
+\renewcommand{\bibname}{参考文献}
+
+\geometry{left=25mm,right=25mm,top=30mm,bottom=30mm}
+
+\begin{document}
+
+\input{front-page.tex}
+
+\input{preface.tex}
+
+\chapter{数値計算の理論}
+\input{numerical-analysis-theory.tex}
+
+\input{simulation-astronomy.tex}
+
+\chapter{カッシーニ\\グランドフィナーレ}
+\input{cassini.tex}
+
+\input{momo.tex}
+
+\input{bocchan-1.tex}
+
+\input{references.tex}
+
+\input{afterword.tex}
+
+\end{document}

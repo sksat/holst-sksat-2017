@@ -1,0 +1,304 @@
+\chapter{BoCCHAN-1 OBC\\を触ってみた話}
+
+ここでは，BoCCHAN-1というOBC
+\footnote{On Board Computerの略．}
+を使うにあたって色々やったので，それについて書こうと思います．
+
+\section{BoCCHAN-1 is 何}
+
+そもそもBoCCHAN-1とは何かというと，開発元の木村研究室のサイト
+\footnote{\url{http://www.kimura-lab.net}}
+を見てみると，
+
+\begin{quote}
+木村研究室が開発した技術を使った小型高性能な衛星用計算機ボードで，6cm四方の大きさでありながら従来の超小型衛星のOBCとは一線を画す性能を発揮します．
+\end{quote}
+
+とあります．
+
+大学発の小型人工衛星，「ほどよし」の主計算機として使われていたりする，けっこうすごいやつです．
+
+え？なんでそんな特殊なコンピュータ使ってんのかって？
+実は今年，東京理科大学がやっている宇宙教育プログラム
+\footnote{\url{https://www.tus.ac.jp/uc}}
+というものに参加していまして，
+そこでやるCanSat実験用に使っています（贅沢すぎでは）．
+
+\section{機能とか}
+なんとこいつLinuxが動きます．
+第１回CHD
+\footnote{CanSat Hands-on Discussion}
+のときこれを聞いて、静かに興奮しておりました.
+アーキテクチャはSH4
+\footnote{https://ja.wikipedia.org/wiki/SuperH
+SH4ってなんか聞いたことがあるようなって思ってたけど、OSECPUのhh4と名前が似てる.
+関係ないけど.)}
+．組み込みってかんじですね．
+
+インターフェースについては，I2CとかUARTとかGPIOとかイケるみたいで中々良い．
+
+Xbeeで通信もできるし．
+
+\section{チュートリアルやってみた}
+
+宇宙教育プログラムLETUS
+\footnote{理科大の教育用のなにかの宇宙教育PG用鯖．
+掲示板とかファイルアップロード出来るのはいいなと思うけど通知とか遅らせられないんですかね．
+頻繁に見に行くというのは地味にめんどい．
+調べてみたらmoodleっていうOSSを使ってるっぽくて，Rubyで書かれたAPIラッパーがあったから試してみようとしたのだけれど，管理者権限が無いといけないみたいで諦めた．
+仕方ないからBeautifulSoupからログインするスクリプト書いたけど，めんどくさくなってそれで終わってる．
+新規投稿が来たらSlackに流すみたいなのが出来れば便利なんだけど．}
+にアップロードされたクイックスタートガイドやユーザーズマニュアルとかを見ながらチュートリアルとかをやってみました．
+
+そこに書いてあった開発手順を簡単に紹介すると，
+
+\begin{itemize}
+	\item 開発環境一式が入っている仮想マシンイメージをダウンロード
+	\item 仮想マシン内の"ほどよしSDK"が導入されたEclipseを起動して，"Executable with HODOYOSHI SDK"プロジェクトを選択して作成
+	\item C/C++でコーディングしてビルド
+	\item Eclipseの中にいる"BoCCHAN-1 ttyConsole"からBoCCHAN-1にシリアル接続
+	\item バイナリを"BoCCHAN-1 ttyConsole"にD\&Dして転送
+	\item ttyConsoleから実行してみる
+\end{itemize}
+
+みたいなかんじでした．
+
+\section{開発環境の自作}
+というわけで，チュートリアルは出来たのですが，ここでいくつか問題が発生しました．
+問題とは何かというと，
+
+\begin{itemize}
+	\item 僕のマシンが非力すぎて長時間仮想マシン(しかもUbuntu)で作業とかちょっとツライさん
+	\item EclipseというかIDEﾁｮｯﾄ..vim \footnote{高機能なテキストエディタ．えまっくす...?なんですかそれは（戦争）}でやりたい
+\end{itemize}
+
+はい．開発環境自作のお時間です．
+
+まずはEclipseどうなってんのかなと思ったので，適当な"Executable with HODOYOSHI SDK"プロジェクトを作って，Makefileを見てみました.
+IDEが生成したMakefileとかクソ長いんじゃないの・・・とか思ったものの、かなり短かったのでやってることはすぐわかりました(Releaseだけだったし)．
+主要な部分を抜き出すと、リスト\ref{hodosdk-makefile-subdir},\ref{hodosdk-makefile-main}のようになっていました．
+
+\begin{lstlisting}[language=make,label=hodosdk-makefile-subdir,caption=subdir.mk(コンパイル部分)]
+%o:../%.cpp
+    @echo 'Building file: $<'
+    @echo 'Invoking: SH4-Linux G++ Compiler'
+    sh4-linux-g++ -I/home/shdevelop/hodosdk/include/ -O0 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o "$@" "$<"
+    @echo 'Finished Building: $<'
+\end{lstlisting}
+
+\begin{lstlisting}[language=make,label=hodosdk-makefile-main,caption=makefile(リンク部分)]
+hoge: $(OBJS) $(USER_OBJS)
+    @echo 'Building target: $@'
+    @echo 'Invoking: SH4-Linux G++ Linker'
+    sh4-linux-g++ -L/home/shdevelop/hodosdk/lib -o "hoge" $(OBJS) $(USER_OBJS) $(LIBS)
+    @echo 'Finished building target: $@'
+\end{lstlisting}
+
+ちなみに\$(LIBS)は、objects.mkにて、リスト\ref{hodosdk-makefile-libs}のように定義されていました．
+
+\begin{lstlisting}[language=make,label=hodosdk-makefile-libs,caption=\$(LIBS)の定義]
+LIBS := -lpthread -lm -lhodoyoshi -lrt
+\end{lstlisting}
+
+ようするに，SuperH向けのg++でコンパイルして，ほどよしSDK内のライブラリをリンクしてるだけです．
+なんだこれならホスト環境でも全然出来そうじゃん．
+
+なんかpacman
+\footnote{Arch Linuxのパッケージマネージャ．Archはいいぞ．}
+でそれっぽいのが見つからなかったのと，ほどよしSDKとかが結構古いバージョンのもので構成されてたので，Ubuntu環境に移動してSH4向けのgcc,g++を探してみると，Debian wikiに書いてありました \footnote{\url{https://wiki.debian.org/SH4}}．
+apt-getでリスト\ref{apt-install-sh4-compilers}のようにしてインストールします．
+
+\begin{lstlisting}[language=bash,label=apt-install-sh4-compilers]
+# apt-get install gcc-sh4-linux-gnu g++-sh4-linux-gnu
+\end{lstlisting}
+
+\newpage
+よーし，これでいけるでしょう，ということで，
+\begin{lstlisting}[language=bash,caption=sh4-linux-gnuでコンパイル，qemuでテスト実行]
+$ vim hello.c
+$ sh4-linux-gnu-gcc hello.c -o hello
+$ file hello
+hello: ELF 32-bit LSB executable, Renesas SH, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux.so.2, BuildID[sha1]=..., for GNU/Linux 3.2.0, not stripped
+$ qemu-sh4 -L /usr/sh4-linux-gnu/ ./hello
+Hello, World!
+\end{lstlisting}
+
+うん，いいかんじ．
+じゃあこれをBoCCHAN-1に転送して・・・あれ？転送ってどうやってやってるんだ？
+シリアル接続してコンソールにD\&Dってあれなにやってんの？
+
+クイックスタートガイドだけではよく分からなかったので，ユーザーズマニュアルを見てみると，EclipseのttyConsoleの代わりにTera Term
+\footnote{Windows用のターミナルエミュレータ(そういえば作者の方がFF内...ひょええ)}
+を使ったファイルのアップロード・ダウンロード方法が書いてありました.
+読んでみると，Tera Termというより，それに付属しているZMODEMとかいうものでバイナリをやり取りしているみたいです．
+
+ZMODEMってなんぞ？ということで，調べてみます．
+\url{https://ja.wikipedia.org/wiki/ZMODEM}によると，
+YMODEMというバイナリ転送プロトコルを改善したものらしい．
+1986年...生まれてねえ...
+
+じゃあYMODEMってなんなの？これもWikiを見てみます．
+\url{https://ja.wikipedia.org/wiki/YMODEM}
+
+ZMODEMよりは説明が詳しい。これは1985年．１年で名前変えたのか...
+
+そして，これはこれでXMODEMとかいうのを発展させたものらしいので，それも見てみる．
+\url{https://ja.wikipedia.org/wiki/XMODEM}
+
+パソコン通信で広く使われてたそうな（こいつは何年なんだ...）.
+
+さて、wikiだとあんまり使い方とかが分からなかったのでまた色々と調べてみると，シリアル接続やtelnet接続，SSHなどでリモートにログインしている時に，受信側でrz、送信側でszを実行すると(速度は遅いが)バイナリが双方向に転送できるらしい．なるほど．
+
+でもLinuxでTera Termとかは使えないし，出来れば端末内で済ませたいなあと思ったら，screenコマンドなるものを見つけたのでこれを使ってみました．
+BoCCHAN-1をPCにつなぐと/dev/ttyUSB0が生えるので，screenコマンドを使って，ボードレート115200で接続します．
+
+\newpage
+
+
+\begin{lstlisting}[language=bash,caption=screenコマンドで/dev/ttyUSB0にボードレート115200で接続]
+$ screen /dev/ttyUSB0 115200
+\end{lstlisting}
+
+BoCCHAN-1は電源を入れると自動的にLinuxが起動して，ログインまで済ましてくれているので，あとはZMODEMを使ってバイナリを転送すれば良い．
+
+具体的には，BoCCHAN-1側でrzを実行したら
+Ctrl+A+":exec sz hello"
+とかやるとファイルが転送できる．
+
+ようやくバイナリが転送出来たので，張り切ってBoCCHAN-1上で実行してみる．
+
+\begin{lstlisting}[language=sh]
+$ ./hello
+sh: ./hello: not found
+\end{lstlisting}
+
+...は？
+
+\begin{lstlisting}[language=sh]
+$ ls hello
+hello
+\end{lstlisting}
+
+は？？？
+
+なんでえええええええ（泣）
+
+これ,１週間ぐらい理由が分かりませんでした.
+
+最初は転送がうまく行かなかったのかとか色々考えて,配布された仮想環境でビルドしてできたバイナリを同じ方法で転送してみたりしたのですが,これはうまくいくんですよねえ...
+
+原因は,うまく行く方とうまく行かない方のバイナリをfileコマンドにかけてみたら分かりました.
+CTF
+\footnote{Capture The Flagの略語．もともと互いに相手陣地の旗を奪い合う騎馬戦や棒倒しに似た野外ゲームのことで，そこから派生して，ファーストパーソン・シューティングゲームなどのeスポーツや，コンピュータセキュリティなどの分野でも用いられる．ここではコンピュータセキュリティの分野のCTFのこと．筆者は一応Harekazeというチームに所属しているが，中々貢献できていないので頑張りたい．}
+かよ.
+
+fileコマンドの実行結果をうまく行く方とうまく行かない方で比べてみたのがリスト\ref{command-file-good},\ref{command-file-not-good}．
+
+\begin{lstlisting}[language=bash,label=command-file-good,caption=うまく行く方]
+$ file hello
+hello: ELF 32-bit LSB executable, Renesas SH, version 1 (SYSV), dynamically linked, interpreter /lib/ld-uClibc.so.0, not stripped
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash,label=command-file-not-good,caption=うまく行かない方]
+$ file hello
+hello: ELF 32-bit LSB executable, Renesas SH, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux.so.2, BuildID[sha1]=..., for GNU/Linux 3.2.0, not stripped
+\end{lstlisting}
+
+どうやら、インタプリタとやらが違うらしい．
+このインタプリタってなんぞ？
+調べてみたら，ELF
+\footnote{Executable and Linkable Formatの略．Linuxにおけるexeファイルみたいなものと思ってくれて構わない（かなり違うけど）．ようするにバイナリファイル．}
+の共用ライブラリをmmapに配置するあいつでした．
+確かにそれ違ったら動かないよね．
+じゃあうまく行く方のELFインタプリタ，/lib/ld-uClibc.so.0ってなんなんだ...
+なんかlibc
+\footnote{標準Cライブラリ．C言語でプログラミングをするときによく使う関数を集めたもの．}
+っぽい名前だけど...
+
+これも調べてみたら,uClibcという組み込み向けのlibc用のインタプリタ,みたいなかんじのものでした．
+「libcってglibcでしょ？」みたいな先入観が抜け切れていませんでした．反省．
+
+ということで，どうやらuClibcを使わなきゃいけないみたいですが，使用するlibcを変更するとかやろうとすると，gccの設定ファイル弄ったり色々しないといけないらしく，どうも面倒です．
+
+でも，そういえば仮想環境の方では普通にsh4用のg++を使っているだけでした．
+つまり何らかの方法があるはずです．
+
+ここで、ユーザーズマニュアルを眺めていたら，buildrootという文字列を見つけました．
+BoCCHAN-1で動いているLinuxはこいつを使ってビルドしたらしいですね．
+ということでbuildrootについて調べてみると，公式サイト
+\footnote{\url{https://buildroot.org}}
+があったので見てみると，
+
+\begin{quote}
+Buildroot is a simple, efficient and easy-to-use tool to generate embedded Linux systems through cross-compilation.
+\end{quote}
+
+とのこと．
+
+組み込みLinux向けのクロスコンパイル用のツールを簡単に作る・・・？どういうことだ・・・？
+
+調べてみると，Buildrootを使って別のアーキテクチャ用のクロスコンパイル環境を作るという記事
+\footnote{\url{http://www.ne.jp/asahi/it/life/it/embedded/buildroot/buildroot_mips.html}}
+があったので見てみました．
+この記事ではターゲットアーキテクチャはMIPSでしたが，このBuildrootというやつはマルチアーキテクチャの組み込みLinux向けのクロスコンパイラやリンカ，さらにLinuxイメージまで作ってくれるもの，ということが分かりました．
+
+\begin{lstlisting}[language=bash]
+$ make menuconfig
+\end{lstlisting}
+
+でTUIの分かりやすい画面で細かいところまで設定出来るのが良いですね．
+ちょっとcrosstool-ngっぽいような気もします．
+
+TOOLCHAINの"C library"を見てみると，デフォルトでuClibcが選択されていました．
+これはいけそうだ。
+
+本当は仮想環境のbuildrootとgccを同じバージョンにしたり，色々と設定を合わせたりした方がいいとは思うのですが，面倒だったのでとりあえずTARGET ArchitectureをSuperH，Target Architecture Variantをsh4(SH4 Little Endian)に設定しました．
+
+ついでに，C++を使いたいので"GCC Options"の"Enable C++ support"にもチェックを入れておきます\footnote{最初気づかなくてビルドし直した}.
+
+これで，".config"というファイルに設定が保存されるので，makeして数時間ほど待つと，buildroot/output/host/usr/bin下にクロスコンパイラやリンカが大量に生えます．
+
+\begin{lstlisting}[language=bash]
+$ ls output/host/usr/bin
+...
+sh4-buildroot-linux-uclibc-ar@
+sh4-buildroot-linux-uclibc-as@
+sh4-buildroot-linux-uclibc-c++@
+sh4-buildroot-linux-uclibc-cc@
+sh4-buildroot-linux-uclibc-g++@
+sh4-buildroot-linux-uclibc-gcc@
+sh4-buildroot-linux-uclibc-gcc-5.4.0@
+...
+toolchain-wrapper*
+\end{lstlisting}
+
+このコンパイラでプログラムをビルドして，ZMODEMでBoCCHAN-1に転送すると...
+
+\begin{lstlisting}[language=sh]
+$ ./hello
+Hello, BoCCHAN-1!
+\end{lstlisting}
+
+ｷﾀｱｱｱｱｱ!!!
+
+いやー，時間かかりました．
+宇宙教育プログラム受講生でここまでしたの僕ぐらいでしょ（謎のイキリ）（無駄な努力）（素直に配布された環境使え）
+
+今回作った開発環境もどきはGitHubの以下のリポジトリに置いときました。
+
+\url{https://github.com/sk2sat/BoCCHAN-1}
+
+なんか間違ってるとことかあったらPull RequestなりIssueなり頂けると嬉しいです（BoCCHAN-1ユーザーそんなにいないだろ
+
+\section{余談}
+
+ほどよしSDKのサイト
+\footnote{\url{http://www.hodoyoshi.org}}
+落ちてる（数年前は割と活動してたっぽい）し，色々とBoCCHAN-1とかほどよしSDKの情報少なすぎでは．．．
+
+もっと情報がオープンになったらいいなーと思うので，CanSat合宿の時にでも木村教授に話してみたいです．
+
+あと，この原稿は僕のブログ記事(\url{http://sksat.hatenablog.com/entry/2017/08/07/203615})を元にしました．
+無断転載とかではないのであしからず．
+また，今回部誌に載せるにあたってMarkdownから \LaTeX に移行したり，加筆修正を行ったりしました．
+
